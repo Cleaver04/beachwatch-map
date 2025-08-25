@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NSW Beach Water Quality</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Leaflet Search plugin -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/stefanocudini/leaflet-search@2.9.8/dist/leaflet-search.min.css" />
+  <script src="https://cdn.jsdelivr.net/gh/stefanocudini/leaflet-search@2.9.8/dist/leaflet-search.min.js"></script>
+
+  <style>
+    #map {position: absolute; top: 0; bottom: 0; left: 0; right:0;}
+    .legend { background: white; padding: 6px; line-height: 2.4em; width: 250px; height: 210px; }
+
+    .leaflet-control-search input {
+    width: 250px !important;  
+    height: 30px !important;   
+    font-size: 18px;          
+    padding: 4px 8px;
+}
+  </style>
+</head>
+<body>
+  <h1>NSW Beach Water Quality</h1>
+  <div id="map"></div>
+
+  <script>
+    var map = L.map("map").setView([-33.86, 151.2], 9); // Sydney
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    // GeoJSON layer placeholder
+    var beachLayer = L.geoJSON(null, {
+      pointToLayer: function (feature, latlng) {
+        return L.circleMarker(latlng, {
+          radius: 9,
+          fillColor: getColor(feature.properties.pollution_forecast),
+          color: "#000",
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
+        });
+      },
+      onEachFeature: function (feature, layer) {
+    layer.bindPopup(`
+      <b>${feature.properties.site_name}</b><br>
+      Pollution Status: ${pollution(feature.properties.pollution_forecast)}<br>
+      Date: ${formatDate(feature.properties.pollution_forecast_timestamp)}<br>
+      ${desc(feature.properties.pollution_forecast)}
+    `);
+  }
+    }).addTo(map);
+
+    // Load GeoServer WFS
+    fetch("http://localhost:8080/geoserver/ne/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=ne:beach_sites&outputFormat=application/json")
+      .then(res => res.json())
+      .then(data => {
+        beachLayer.addData(data);
+
+        //var legend_icon = l.icon('; width:18px; height:18px; display:inline-block; border-radius:50%; margin-right:6px; vertical-align:middle;"></span> ')
+
+  var searchControl = new L.Control.Search({
+  layer: beachLayer,
+  propertyName: 'site_name',
+  collapsed: false,
+  zoom: 16, 
+  buildTip: function (text, val) {
+  // grab feature properties
+  let props = val.layer.feature.properties;
+  let status = props.pollution_forecast;
+
+  // pick a color based on status
+  let color = "grey"; // default
+  if (status) {
+    status = status.toLowerCase();
+    if (status.includes("unlikely")) color = "green";
+    else if (status.includes("likely")) color = "#8B0000";
+    else if (status.includes("possible")) color = "yellow";
+    else if (status.includes("forecast not available")) color = "grey";
+  }
+
+  // return styled row in suggestions list
+  return (
+    '<div style="display:flex;align-items:center;">' +
+      '<span style="background:' + color + '; width:32px; height:32px; border-radius:50%; display:inline-block; margin-right:6px;"></span>' +
+      '<b style="font-size:18px;">' +  text + '</b>' +
+    "</div>"
+  );
+}
+
+});
+
+
+        map.addControl(searchControl);
+
+        searchControl.on('search:locationfound', function(e) {
+        if (e.layer) {
+        e.layer.openPopup();   // opens the popup bound in your onEachFeature
+  }
+});
+      });
+
+
+    // Legend
+    var legend = L.control({ position: "bottomright" });
+    legend.onAdd = function (map) {
+      var div = L.DomUtil.create("div", "legend"),
+          categories = ["Unlikely", "Possible", "Likely", "Forecast not available"],
+          colors = ["green", "yellow", "#8B0000", "grey"];
+
+      div.innerHTML = '<h3 style="font-size:24px; text-align:center; margin-bottom:15px;margin-top:15px;">Pollution Forecast</h3>';
+      for (var i = 0; i < categories.length; i++) {
+       div.innerHTML +=
+        '<div style="display:flex; align-items:center; margin-bottom:6px;">' +  
+         '<span style="background:' + colors[i] +
+         '; width:32px; height:32px; border-radius:50%; display:inline-block; margin-right:10px;"></span>' +
+         '<span style="font-size:18px; font-family:Calibri, sans-serif;">' + categories[i] + '</span>' +
+       '</div>';
+      }
+
+      return div;
+    };
+    legend.addTo(map);
+
+    function getColor(status) {
+      if (!status) return "red";
+      if (status.includes("Unlikely")) return "green";
+      if (status.includes("Likely")) return "#8B0000";
+      if (status.includes("Possible")) return "yellow";
+      if (status.includes("Forecast not available")) return "grey";
+      return "orange";
+    }
+
+    function desc(status) {
+     if (status.includes("Unlikely")) return '<span style="font-weight:bold; color:green;">Swim Safely</span>';
+  
+     if (status.includes("Likely")) return '<span style="font-weight:bold; color:#8B0000; text-shadow: 0 0 10px black;">Do Not Swim - High Chance of Pollution causing Sickness</span>';
+  
+     if (status.includes("Possible")) 
+     return '<span style="font-weight:bold; color:yellow; text-shadow: 0 0 10px black;">Swim with caution</span>';
+  
+     if (status.includes("Forecast not available")) 
+     return '<span style="font-weight:bold; color:grey;">No Data Available</span>';
+    }
+    function pollution(status) {
+     if (status.includes("Unlikely")) return '<span style="font-weight:bold; color:green;">Unlikely</span>';
+  
+     if (status.includes("Likely")) return '<span style="font-weight:bold; color:#8B0000; text-shadow: 0 0 10px black;">Likely</span>';
+  
+     if (status.includes("Possible")) 
+     return '<span style="font-weight:bold; color:yellow; text-shadow: 0 0 10px black;">Possible</span>';
+  
+     if (status.includes("Forecast not available")) 
+     return '<span style="font-weight:bold; color:grey;">Forecast not available</span>';
+    }
+
+
+    function formatDate(isoString) {
+     const date = new Date(isoString);
+     return date.toLocaleString("en-AU", {
+     day: "2-digit",
+     month: "short",   
+     year: "numeric",
+     hour: "2-digit",
+     minute: "2-digit",
+     hour12: false     // 24hr clock (set true for AM/PM)
+     });
+    }
+
+
+  </script>
+</body>
+</html>
