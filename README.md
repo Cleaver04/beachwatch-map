@@ -1,1 +1,1 @@
-NSW Water Quality Cloud-Based web application : https://cleaver04.github.io/beachwatch-map/
+NSW Water Quality Cloud-Based web application : https://cleaver04.github.io/beachwatch-map/ (Beta)
